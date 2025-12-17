@@ -13,3 +13,4 @@ The project documentation will be built during the bootcamp sessions.
 - [UI Guidelines](../docs/ui-guidelines.md) - UI/UX development guidelines and best practices
 - [Testing Guidelines](../docs/testing-guidelines.md) - Testing principles and best practices
 - [Coding Guidelines](../docs/coding-guidelines.md) - Coding standards, style guidelines, and quality principles
+- [Vite/Vitest Migration](../docs/vite-vitest-migration.md) - Migration roadmap from CRA to Vite and Jest to Vitest

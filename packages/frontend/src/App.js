@@ -1,126 +1,250 @@
 import React, { useState, useEffect } from 'react';
-import './App.css';
+import {
+  Container,
+  Box,
+  Typography,
+  Button,
+  AppBar,
+  Toolbar,
+  Snackbar,
+  Alert,
+  Fab,
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import TaskList from './components/tasks/TaskList';
+import TaskForm from './components/tasks/TaskForm';
+import TaskFilters from './components/tasks/TaskFilters';
+import ConfirmDialog from './components/common/ConfirmDialog';
+import {
+  fetchTasks,
+  createTask,
+  updateTask,
+  updateTaskStatus,
+  deleteTask,
+} from './utils/api';
+import { filterTasksByStatus, searchTasks, sortTasksByDueDate } from './utils/taskUtils';
 
 function App() {
-  const [data, setData] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newItem, setNewItem] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
+  // Fetch tasks on mount
   useEffect(() => {
-    fetchData();
+    loadTasks();
   }, []);
 
-  const fetchData = async () => {
+  const loadTasks = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/items');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const result = await response.json();
-      setData(result);
-      setError(null);
-    } catch (err) {
-      setError('Failed to fetch data: ' + err.message);
-      console.error('Error fetching data:', err);
+      const data = await fetchTasks();
+      setTasks(data);
+      setSnackbar({ open: true, message: 'Tasks loaded successfully', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: `Failed to load tasks: ${error.message}`, severity: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!newItem.trim()) return;
-
+  const handleAddTask = async (taskData) => {
     try {
-      const response = await fetch('/api/items', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: newItem }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add item');
-      }
-
-      const result = await response.json();
-      setData([...data, result]);
-      setNewItem('');
-    } catch (err) {
-      setError('Error adding item: ' + err.message);
-      console.error('Error adding item:', err);
+      const newTask = await createTask(taskData);
+      setTasks([...tasks, newTask]);
+      setSnackbar({ open: true, message: 'Task created successfully', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: `Failed to create task: ${error.message}`, severity: 'error' });
     }
   };
 
-  const handleDelete = async (itemId) => {
+  const handleUpdateTask = async (taskData) => {
     try {
-      const response = await fetch(`/api/items/${itemId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete item');
-      }
-
-      setData(data.filter(item => item.id !== itemId));
-      setError(null);
-    } catch (err) {
-      setError('Error deleting item: ' + err.message);
-      console.error('Error deleting item:', err);
+      const updatedTask = await updateTask(editingTask.id, taskData);
+      setTasks(tasks.map(task => task.id === updatedTask.id ? updatedTask : task));
+      setSnackbar({ open: true, message: 'Task updated successfully', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: `Failed to update task: ${error.message}`, severity: 'error' });
     }
   };
+
+  const handleSubmitForm = (taskData) => {
+    if (editingTask) {
+      handleUpdateTask(taskData);
+    } else {
+      handleAddTask(taskData);
+    }
+  };
+
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setFormOpen(false);
+    setEditingTask(null);
+  };
+
+  const handleDeleteClick = (taskId) => {
+    setTaskToDelete(taskId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteTask(taskToDelete);
+      setTasks(tasks.filter(task => task.id !== taskToDelete));
+      setSnackbar({ open: true, message: 'Task deleted successfully', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: `Failed to delete task: ${error.message}`, severity: 'error' });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setTaskToDelete(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmOpen(false);
+    setTaskToDelete(null);
+  };
+
+  const handleStatusChange = async (taskId, newStatus) => {
+    try {
+      const updatedTask = await updateTaskStatus(taskId, newStatus);
+      setTasks(tasks.map(task => task.id === updatedTask.id ? updatedTask : task));
+      setSnackbar({ open: true, message: 'Status updated successfully', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: `Failed to update status: ${error.message}`, severity: 'error' });
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  // Apply filters and search
+  const getFilteredTasks = () => {
+    let filtered = tasks;
+    
+    // Apply status filter
+    filtered = filterTasksByStatus(filtered, statusFilter);
+    
+    // Apply search
+    filtered = searchTasks(filtered, searchTerm);
+    
+    // Sort by due date
+    filtered = sortTasksByDueDate(filtered);
+    
+    return filtered;
+  };
+
+  const filteredTasks = getFilteredTasks();
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>To Do App</h1>
-        <p>Keep track of your tasks</p>
-      </header>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* App Bar */}
+      <AppBar position="static" elevation={1}>
+        <Toolbar>
+          <Typography variant="h6" component="h1" sx={{ flexGrow: 1, fontWeight: 600 }}>
+            TODO App
+          </Typography>
+          <Button
+            color="inherit"
+            startIcon={<AddIcon />}
+            onClick={() => setFormOpen(true)}
+            sx={{
+              display: { xs: 'none', sm: 'flex' },
+              minHeight: 44,
+            }}
+          >
+            Add Task
+          </Button>
+        </Toolbar>
+      </AppBar>
 
-      <main>
-        <section className="add-item-section">
-          <h2>Add New Item</h2>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Enter item name"
-            />
-            <button type="submit">Add Item</button>
-          </form>
-        </section>
+      {/* Main Content */}
+      <Container maxWidth="lg" sx={{ flexGrow: 1, py: 4 }}>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 500 }}>
+            My Tasks
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Keep track of your tasks and stay organized
+          </Typography>
+        </Box>
 
-        <section className="items-section">
-          <h2>Items from Database</h2>
-          {loading && <p>Loading data...</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && (
-            <ul>
-              {data.length > 0 ? (
-                data.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="delete-btn"
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </li>
-                ))
-              ) : (
-                <p>No items found. Add some!</p>
-              )}
-            </ul>
-          )}
-        </section>
-      </main>
-    </div>
+        {/* Filters */}
+        <TaskFilters
+          statusFilter={statusFilter}
+          searchTerm={searchTerm}
+          onStatusFilterChange={setStatusFilter}
+          onSearchChange={setSearchTerm}
+          tasks={tasks}
+        />
+
+        {/* Task List */}
+        <TaskList
+          tasks={filteredTasks}
+          onEdit={handleEditTask}
+          onDelete={handleDeleteClick}
+          onStatusChange={handleStatusChange}
+          loading={loading}
+        />
+      </Container>
+
+      {/* Floating Action Button (Mobile) */}
+      <Fab
+        color="primary"
+        aria-label="add task"
+        onClick={() => setFormOpen(true)}
+        sx={{
+          position: 'fixed',
+          bottom: 16,
+          right: 16,
+          display: { xs: 'flex', sm: 'none' },
+        }}
+      >
+        <AddIcon />
+      </Fab>
+
+      {/* Task Form Dialog */}
+      <TaskForm
+        open={formOpen}
+        initialData={editingTask || {}}
+        onSubmit={handleSubmitForm}
+        onCancel={handleCloseForm}
+        title={editingTask ? 'Edit Task' : 'Add Task'}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="Delete Task"
+        message="Are you sure you want to delete this task? This action cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        confirmText="Delete"
+        confirmColor="error"
+      />
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 }
 
